@@ -1,4 +1,4 @@
-package com.projectF.ComVerse.domain.mappers;
+package com.projectF.ComVerse.mapper;
 
 import com.projectF.ComVerse.domain.dtos.UserDto;
 import com.projectF.ComVerse.domain.entities.UserEntity;
