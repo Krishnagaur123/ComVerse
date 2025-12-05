@@ -69,8 +69,20 @@ export const getAllCommunities = async (): Promise<CommunityDto[]> => {
 };
 
 /**
+ * User Profile DTO matching backend structure
+ */
+export interface UserProfileDto {
+  id: number;
+  username: string;
+  avatarUrl: string | null;
+  age: number | null;
+  communitiesJoined: CommunityDto[];
+  communitiesCreated: CommunityDto[];
+  posts: any[]; // PostDto[] - not needed for this module
+}
+
+/**
  * Fetches communities for a specific user
- * Uses the user profile endpoint which returns communitiesJoined
  * @param userId - The ID of the user
  * @returns Promise resolving to array of CommunityDto
  * @throws Error if the API call fails
@@ -88,11 +100,80 @@ export const getUserCommunities = async (userId: number): Promise<CommunityDto[]
       throw new Error(`Failed to fetch user communities: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json();
-    // The profile endpoint returns communitiesJoined array
-    return data.communitiesJoined || [];
+    const userProfile: UserProfileDto = await response.json();
+    return userProfile.communitiesJoined || [];
   } catch (error) {
     console.error('Error fetching user communities:', error);
+    throw error;
+  }
+};
+
+/**
+ * Create Community Request DTO
+ */
+export interface CreateCommunityRequest {
+  name: string;
+  description: string;
+  bannerUrl: string | null;
+  type: CommunityType;
+}
+
+/**
+ * Creates a new community
+ * @param data - Community creation data
+ * @param creatorUserId - The ID of the user creating the community
+ * @returns Promise resolving to CommunityDto
+ * @throws Error if the API call fails
+ */
+export const createCommunity = async (
+  data: CreateCommunityRequest,
+  creatorUserId: number
+): Promise<CommunityDto> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/communities?creatorUserId=${creatorUserId}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(data),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to create community: ${response.status} ${response.statusText} - ${errorText}`);
+    }
+
+    const communityData: CommunityDto = await response.json();
+    return communityData;
+  } catch (error) {
+    console.error('Error creating community:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetches a community by ID
+ * @param id - The ID of the community
+ * @returns Promise resolving to CommunityDto
+ * @throws Error if the API call fails
+ */
+export const getCommunityById = async (id: number): Promise<CommunityDto> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/communities/${id}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch community: ${response.status} ${response.statusText}`);
+    }
+
+    const data: CommunityDto = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching community:', error);
     throw error;
   }
 };

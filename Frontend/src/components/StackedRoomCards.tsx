@@ -1,6 +1,6 @@
-import { useState ,useMemo, useRef, Suspense} from 'react';
+import { useState, useMemo, useRef, Suspense } from 'react';
 import type React from 'react';
-import { Phone, Image, MessageCircle, Megaphone, X } from 'lucide-react';
+import { Phone, Image, MessageCircle, Megaphone, X, Plus } from 'lucide-react';
 
 interface Room {
   id: string;
@@ -13,33 +13,10 @@ interface Room {
 interface StackedRoomCardsProps {
   onRoomSelect: (room: Room) => void;
   isMotionReduced?: boolean;
+  rooms?: Room[]; // Optional: if provided, use real data instead of dummy
+  onCreateRoom?: () => void; // Callback for create room button
+  canCreateRoom?: boolean; // Whether user can create rooms
 }
-
-const roomStacks = {
-  voice: [
-    { id: 'v1', name: 'Main Voice Lounge', description: 'General voice chat', activeUsers: 12, type: 'voice' as const },
-    { id: 'v2', name: 'Gaming Voice', description: 'Gaming sessions', activeUsers: 8, type: 'voice' as const },
-    { id: 'v3', name: 'Music Jam', description: 'Share music together', activeUsers: 5, type: 'voice' as const },
-    { id: 'v4', name: 'Study Room', description: 'Quiet co-working', activeUsers: 3, type: 'voice' as const },
-  ],
-  memes: [
-    { id: 'm1', name: 'Meme Central', description: 'Best memes here', activeUsers: 45, type: 'memes' as const },
-    { id: 'm2', name: 'Art & Creations', description: 'Share your art', activeUsers: 23, type: 'memes' as const },
-    { id: 'm3', name: 'Video Vault', description: 'Cool videos', activeUsers: 18, type: 'memes' as const },
-    { id: 'm4', name: 'Screenshots', description: 'Gaming screenshots', activeUsers: 12, type: 'memes' as const },
-  ],
-  general: [
-    { id: 'g1', name: 'General Chat', description: 'Main discussion', activeUsers: 67, type: 'general' as const },
-    { id: 'g2', name: 'Tech Talk', description: 'Technology discussion', activeUsers: 34, type: 'general' as const },
-    { id: 'g3', name: 'Random', description: 'Random topics', activeUsers: 29, type: 'general' as const },
-    { id: 'g4', name: 'Help & Support', description: 'Get help here', activeUsers: 15, type: 'general' as const },
-  ],
-  announcements: [
-    { id: 'a1', name: 'News & Updates', description: 'Latest updates', activeUsers: 156, type: 'announcements' as const },
-    { id: 'a2', name: 'Events', description: 'Upcoming events', activeUsers: 89, type: 'announcements' as const },
-    { id: 'a3', name: 'Rules', description: 'Community guidelines', activeUsers: 42, type: 'announcements' as const },
-  ],
-};
 
 const stackConfig = {
   voice: { title: 'Voice Call', icon: Phone, color: '#28f5cc', floatDelay: 0 },
@@ -376,7 +353,35 @@ function ExpandedRoom3D({ title, rooms, onRoomOpen }) {
   );
 }
 
-export function StackedRoomCards({ onRoomSelect, isMotionReduced = false }: StackedRoomCardsProps) {
+export function StackedRoomCards({ 
+  onRoomSelect, 
+  isMotionReduced = false, 
+  rooms = [], 
+  onCreateRoom,
+  canCreateRoom = false 
+}: StackedRoomCardsProps) {
+  // Organize rooms by type
+  const roomStacks = useMemo(() => {
+    const stacks: Record<string, Room[]> = {
+      voice: [],
+      memes: [],
+      general: [],
+      announcements: [],
+    };
+
+    rooms.forEach(room => {
+      const type = room.type;
+      if (type in stacks) {
+        stacks[type].push(room);
+      } else {
+        // Default to general if type doesn't match
+        stacks.general.push(room);
+      }
+    });
+
+    return stacks;
+  }, [rooms]);
+
   const [selectedStack, setSelectedStack] = useState<keyof typeof roomStacks | null>(null);
   const [rocketPosition, setRocketPosition] = useState<{ x: number; y: number } | null>(null);
   const [isRocketFlying, setIsRocketFlying] = useState(false);
@@ -424,10 +429,40 @@ export function StackedRoomCards({ onRoomSelect, isMotionReduced = false }: Stac
       {/* Stacks View */}
       {!selectedStack && (
         <div className="grid grid-cols-2 gap-x-24 gap-y-12 max-w-6xl mx-auto pt-8">
+          {/* Create Room Button - Show if user can create and no rooms exist */}
+          {canCreateRoom && rooms.length === 0 && onCreateRoom && (
+            <div className="col-span-2 flex items-center justify-center">
+              <button
+                onClick={onCreateRoom}
+                className="px-8 py-4 rounded-xl transition-all duration-300 hover:scale-105 flex items-center gap-3"
+                style={{
+                  background: 'rgba(4, 55, 47, 0.3)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1.5px solid rgba(40, 245, 204, 0.35)',
+                  boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.55)';
+                  e.currentTarget.style.boxShadow = '0 12px 35px rgba(40, 245, 204, 0.30)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.35)';
+                  e.currentTarget.style.boxShadow = '0 6px 20px rgba(0, 0, 0, 0.35)';
+                }}
+              >
+                <Plus className="w-6 h-6 text-[#28f5cc]" />
+                <span className="text-white font-semibold text-lg">Create Your First Room</span>
+              </button>
+            </div>
+          )}
+          
           {(Object.keys(roomStacks) as Array<keyof typeof roomStacks>).map((stackType) => {
             const config = stackConfig[stackType];
-            const rooms = roomStacks[stackType];
+            const stackRooms = roomStacks[stackType];
             const Icon = config.icon;
+            
+            // Skip empty stacks
+            if (stackRooms.length === 0) return null;
 
             return (
               <div
@@ -449,7 +484,7 @@ export function StackedRoomCards({ onRoomSelect, isMotionReduced = false }: Stac
                     filter: hoveredStack === stackType ? 'drop-shadow(0 0 20px rgba(40, 245, 204, 0.3))' : 'none',
                   }}
                 >
-                  {rooms.map((room, index) => (
+                  {stackRooms.map((room, index) => (
                     <div
                       key={room.id}
                       className="absolute w-full h-[200px] rounded-2xl transition-all duration-[360ms]"
@@ -457,7 +492,7 @@ export function StackedRoomCards({ onRoomSelect, isMotionReduced = false }: Stac
                         left: index === 0 ? '0' : `${index * 12}px`,
                         top: index === 0 ? '0' : `${index * 12}px`,
                         opacity: index === 0 ? 1 : 0.7 - index * 0.12,
-                        zIndex: rooms.length - index,
+                        zIndex: stackRooms.length - index,
                         background: 'rgba(4, 55, 47, 0.3)',
                         backdropFilter: 'blur(12px)',
                         border: index === 0
@@ -492,13 +527,13 @@ export function StackedRoomCards({ onRoomSelect, isMotionReduced = false }: Stac
                                 fontWeight: '600',
                               }}
                             >
-                              {rooms.length}
+                              {stackRooms.length}
                             </span>
                           </div>
                           
-                          <h4 className="text-white mb-2.5" style={{ fontWeight: '600' }}>{room.name}</h4>
+                          <h4 className="text-white mb-2.5" style={{ fontWeight: '600' }}>{stackRooms[0]?.name || 'No rooms'}</h4>
                           <p className="text-[#747c88] mb-5" style={{ fontSize: '0.9375rem', lineHeight: '1.5' }}>
-                            {room.description}
+                            {stackRooms[0]?.description || ''}
                           </p>
                           <div className="mt-auto flex items-center gap-2.5">
                             <div 
@@ -506,7 +541,7 @@ export function StackedRoomCards({ onRoomSelect, isMotionReduced = false }: Stac
                               style={{ boxShadow: '0 0 8px rgba(40, 245, 204, 0.6)' }}
                             />
                             <span className="text-[#747c88]" style={{ fontSize: '0.875rem' }}>
-                              {room.activeUsers} active
+                              {stackRooms[0]?.activeUsers || 0} active
                             </span>
                           </div>
                         </div>
@@ -544,7 +579,7 @@ export function StackedRoomCards({ onRoomSelect, isMotionReduced = false }: Stac
 
           <ExpandedRoom3D
             title={stackConfig[selectedStack].title}
-            rooms={roomStacks[selectedStack]}
+            rooms={roomStacks[selectedStack] || []}
             onRoomOpen={handleRoomClick}
           />
         </div>

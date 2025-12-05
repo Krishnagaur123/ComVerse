@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { X, Upload, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from './ui/dialog';
+import { createCommunity, CommunityType } from '../api/communityApi';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CreateCommunityModalProps {
   isOpen: boolean;
@@ -20,6 +22,20 @@ interface CreateCommunityModalProps {
   };
 }
 
+// Map frontend display names to backend CommunityType enum
+const COMMUNITY_TYPE_MAP: Record<string, CommunityType> = {
+  'Gaming': CommunityType.GAMING,
+  'Art & Design': CommunityType.ART,
+  'Music': CommunityType.MUSIC,
+  'Technology': CommunityType.TECHNOLOGY,
+  'Sports': CommunityType.SPORTS,
+  'Finance': CommunityType.FINANCE,
+  'Lifestyle': CommunityType.LIFESTYLE,
+  'Travel': CommunityType.TRAVEL,
+  'Education': CommunityType.EDUCATION,
+  'Other': CommunityType.OTHER,
+};
+
 const COMMUNITY_TYPES = [
   'Gaming',
   'Art & Design',
@@ -30,13 +46,11 @@ const COMMUNITY_TYPES = [
   'Lifestyle',
   'Travel',
   'Education',
-  'Science',
-  'Health',
-  'Entertainment',
   'Other',
 ];
 
 export function CreateCommunityModal({ isOpen, onClose, onCreateCommunity, editMode = false, communityData }: CreateCommunityModalProps) {
+  const { user } = useAuth();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [bannerUrl, setBannerUrl] = useState('');
@@ -44,6 +58,7 @@ export function CreateCommunityModal({ isOpen, onClose, onCreateCommunity, editM
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [bannerPreview, setBannerPreview] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Prefill form when in edit mode
@@ -81,32 +96,59 @@ export function CreateCommunityModal({ isOpen, onClose, onCreateCommunity, editM
 
   const handleCreate = async () => {
     if (!name.trim() || !description.trim() || !communityType) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    if (!user?.id) {
+      setError('You must be logged in to create a community');
       return;
     }
 
     setIsSaving(true);
+    setError(null);
 
-    // Simulate save delay
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      const backendType = COMMUNITY_TYPE_MAP[communityType];
+      if (!backendType) {
+        throw new Error('Invalid community type');
+      }
 
-    onCreateCommunity({
-      name,
-      description,
-      bannerUrl: bannerUrl || 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&h=300&fit=crop',
-      communityType,
-    });
+      const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
+      
+      const createdCommunity = await createCommunity(
+        {
+          name: name.trim(),
+          description: description.trim(),
+          bannerUrl: bannerUrl || null,
+          type: backendType,
+        },
+        userId
+      );
 
-    setIsSaving(false);
+      // Call the callback with the created community
+      onCreateCommunity({
+        name: createdCommunity.name,
+        description: createdCommunity.description,
+        bannerUrl: createdCommunity.bannerUrl || '',
+        communityType: communityType,
+      });
 
-    // Reset form
-    if (!editMode) {
-      setName('');
-      setDescription('');
-      setBannerUrl('');
-      setCommunityType('');
-      setBannerPreview(null);
+      // Reset form
+      if (!editMode) {
+        setName('');
+        setDescription('');
+        setBannerUrl('');
+        setCommunityType('');
+        setBannerPreview(null);
+      }
+      onClose();
+    } catch (err) {
+      console.error('Failed to create community:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create community. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-    onClose();
   };
 
   const isFormValid = name.trim() && description.trim() && communityType;
@@ -166,6 +208,13 @@ export function CreateCommunityModal({ isOpen, onClose, onCreateCommunity, editM
 
         {/* Form Content */}
         <div className="px-8 py-6 space-y-6 flex-1 overflow-y-auto">
+          {/* Error Message */}
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+          
           {/* Community Name */}
           <div>
             <label className="block text-white mb-2">Community Name</label>

@@ -8,7 +8,8 @@ import { OpenCommunityButton } from '../components/OpenCommunityButton';
 import { CreateCommunityModal } from '../components/CreateCommunityModal';
 import { useState, useRef, useEffect } from 'react';
 import { ArrowLeft, Plus } from 'lucide-react';
-import { getUserCommunities, CommunityDto, CommunityType } from '../api/communityApi';
+import { getUserCommunities as getUserCommunitiesFromUserApi } from '../api/userApi';
+import { CommunityDto, CommunityType } from '../api/communityApi';
 import { useAuth } from '../contexts/AuthContext';
 
 // Extended community interface for frontend rendering
@@ -114,11 +115,11 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
       try {
         setIsLoadingCommunities(true);
         setCommunitiesError(null);
-        const userId = parseInt(user.id, 10);
+        const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
         if (isNaN(userId)) {
           throw new Error('Invalid user ID');
         }
-        const data = await getUserCommunities(userId);
+        const data = await getUserCommunitiesFromUserApi(userId);
         const mappedCommunities = data.map((dto, index) => mapDtoToCommunity(dto, index));
         setUserCommunities(mappedCommunities);
       } catch (error) {
@@ -168,16 +169,28 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
-  const handleCreateCommunity = (data: {
+  const handleCreateCommunity = async (data: {
     name: string;
     description: string;
     bannerUrl: string;
     communityType: string;
   }) => {
-    console.log('Creating community:', data);
-    // Here you would typically send the data to your backend
-    // For now, just log it and close the modal
+    // The CreateCommunityModal already handles the API call
+    // We just need to refresh the communities list
     setIsCreateModalOpen(false);
+    
+    // Refresh communities after creation
+    if (user?.id) {
+      try {
+        const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
+        const updatedCommunities = await getUserCommunities(userId);
+        // Map to frontend format
+        const mapped = updatedCommunities.map((c, idx) => mapCommunityDtoToFrontend(c, idx));
+        setUserCommunities(mapped);
+      } catch (err) {
+        console.error('Failed to refresh communities:', err);
+      }
+    }
   };
 
   // Render User Profile view
@@ -191,19 +204,12 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
     );
   }
 
-  // Render Community Page view (version 37 CommunityPage)
+  // Render Community Page view
   if (currentView === 'community' && selectedCommunity) {
     return (
       <CommunityPage
-        community={{
-          name: selectedCommunity.name,
-          description: selectedCommunity.description,
-          members: selectedCommunity.members,
-          category: selectedCommunity.category,
-          avatar: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop',
-          banner: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&h=300&fit=crop',
-        }}
-        userRole="Owner"
+        communityId={selectedCommunity.id}
+        userRole="Owner" // TODO: Get actual user role from backend
         onBack={() => {
           setCurrentView('space');
           setSelectedPlanet(null);

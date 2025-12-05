@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { UserSpaceBackground } from '../components/UserSpaceBackground';
 import { CommunitySidebar } from '../components/CommunitySidebar';
 import { StackedRoomCards } from '../components/StackedRoomCards';
@@ -9,31 +9,104 @@ import { AnnouncementChat } from './AnnouncementChat';
 import { DMChat } from './DMChat';
 import { VoiceCallRoom } from './VoiceCallRoom';
 import { MemesPostsPage } from './MemesPostsPage';
+import { CreateRoomModal } from '../components/CreateRoomModal';
+import { getCommunityById } from '../api/communityApi';
+import { getCommunityRooms, RoomDto, RoomType } from '../api/roomApi';
+import { useAuth } from '../contexts/AuthContext';
+import { CommunityType } from '../api/communityApi';
 
 interface CommunityPageProps {
-  community: {
-    name: string;
-    avatar?: string;
-    banner?: string;
-    description: string;
-    members: number;
-    category: string;
-  };
-  userRole: 'Owner' | 'Admin' | 'Member';
+  communityId: number;
+  userRole?: 'Owner' | 'Admin' | 'Member';
   onBack: () => void;
   onGoToHome?: () => void;
   onGoToUserSpace?: () => void;
 }
 
-const currentUser = {
-  name: 'Alex Rivera',
-  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100&h=100&fit=crop',
+// Helper to map CommunityType to category string
+const mapTypeToCategory = (type: CommunityType): string => {
+  const typeMap: Record<CommunityType, string> = {
+    [CommunityType.GAMING]: 'Gaming',
+    [CommunityType.ART]: 'Art & Design',
+    [CommunityType.MUSIC]: 'Music',
+    [CommunityType.TECHNOLOGY]: 'Technology',
+    [CommunityType.SPORTS]: 'Sports',
+    [CommunityType.FINANCE]: 'Finance',
+    [CommunityType.LIFESTYLE]: 'Lifestyle',
+    [CommunityType.TRAVEL]: 'Travel',
+    [CommunityType.EDUCATION]: 'Education',
+    [CommunityType.OTHER]: 'Other',
+  };
+  return typeMap[type] || 'Other';
 };
 
-export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToUserSpace }: CommunityPageProps) {
+// Helper to map RoomType to frontend room type
+const mapRoomTypeToFrontend = (type: RoomType): 'voice' | 'memes' | 'general' | 'announcements' => {
+  switch (type) {
+    case RoomType.VOICE_CHAT:
+      return 'voice';
+    case RoomType.POSTS:
+      return 'memes';
+    case RoomType.CHAT:
+      return 'general';
+    default:
+      return 'general';
+  }
+};
+
+export function CommunityPage({ communityId, userRole = 'Member', onBack, onGoToHome, onGoToUserSpace }: CommunityPageProps) {
+  const { user } = useAuth();
   const [currentPage, setCurrentPage] = useState<'main' | 'manage' | 'room' | 'generalChat' | 'announcementChat' | 'dmChat' | 'voiceCall' | 'memesPosts'>('main');
   const [selectedRoom, setSelectedRoom] = useState<any>(null);
   const [dmTarget, setDmTarget] = useState<{ name: string; avatar: string; role: 'Owner' | 'Admin' | 'Member' } | null>(null);
+  const [isCreateRoomModalOpen, setIsCreateRoomModalOpen] = useState(false);
+
+  // State for fetched data
+  const [community, setCommunity] = useState<{
+    id: number;
+    name: string;
+    description: string;
+    bannerUrl: string | null;
+    type: CommunityType;
+  } | null>(null);
+  const [rooms, setRooms] = useState<RoomDto[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch community and rooms on mount
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const [communityData, roomsData] = await Promise.all([
+          getCommunityById(communityId),
+          getCommunityRooms(communityId),
+        ]);
+
+        setCommunity(communityData);
+        setRooms(roomsData);
+      } catch (err) {
+        console.error('Failed to fetch community data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load community');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [communityId]);
+
+  // Refresh rooms after creation
+  const handleRoomCreated = async () => {
+    try {
+      const roomsData = await getCommunityRooms(communityId);
+      setRooms(roomsData);
+    } catch (err) {
+      console.error('Failed to refresh rooms:', err);
+    }
+  };
 
   const handleNavigate = (page: string) => {
     if (page === 'manage' && userRole === 'Owner') {
@@ -41,25 +114,22 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
     } else if (page === 'home') {
       setCurrentPage('main');
     }
-    // Handle other navigation
   };
 
   const handleRoomSelect = (room: any) => {
     setSelectedRoom(room);
     
     // Route to appropriate page based on room type
-    if (room.type === 'general') {
+    const frontendType = room.frontendType || mapRoomTypeToFrontend(room.type);
+    if (frontendType === 'general') {
       setCurrentPage('generalChat');
-    } else if (room.type === 'announcements') {
+    } else if (frontendType === 'announcements') {
       setCurrentPage('announcementChat');
-    } else if (room.type === 'voice' || room.type === 'vc') {
-      // Voice Channel rooms navigate to Voice Call Room
+    } else if (frontendType === 'voice') {
       setCurrentPage('voiceCall');
-    } else if (room.type === 'memes' || room.type === 'posts') {
-      // Memes/Posts rooms navigate to MemesPostsPage
+    } else if (frontendType === 'memes') {
       setCurrentPage('memesPosts');
     } else {
-      // For other types, use the old RoomPage
       setCurrentPage('room');
     }
   };
@@ -68,7 +138,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
     setDmTarget({
       name: username,
       avatar: avatar,
-      role: 'Member', // You can determine this based on the user data
+      role: 'Member',
     });
     setCurrentPage('dmChat');
   };
@@ -79,17 +149,61 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
     setDmTarget(null);
   };
 
-  // Render Community Detail (Owner Dashboard - from version 35)
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="relative min-h-screen w-full overflow-hidden">
+        <UserSpaceBackground />
+        <div className="relative z-10 flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#28f5cc] mb-4"></div>
+            <p className="text-[#747c88]">Loading community...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error || !community) {
+    return (
+      <div className="relative min-h-screen w-full overflow-hidden">
+        <UserSpaceBackground />
+        <div className="relative z-10 flex items-center justify-center min-h-screen">
+          <div className="text-center max-w-md px-4">
+            <p className="text-red-400 mb-2">Failed to load community</p>
+            <p className="text-[#747c88] text-sm">{error || 'Community not found'}</p>
+            <button
+              onClick={onBack}
+              className="mt-4 px-4 py-2 rounded-lg bg-[#28f5cc] text-black hover:bg-[#04ad7b] transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const currentUser = user ? {
+    name: user.username,
+    avatar: user.avatar,
+  } : {
+    name: 'Guest',
+    avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=guest',
+  };
+
+  // Render Community Detail (Owner Dashboard)
   if (currentPage === 'manage' && userRole === 'Owner') {
     return (
       <CommunityDetail
         community={{
           name: community.name,
-          category: community.category,
-          members: community.members,
+          category: mapTypeToCategory(community.type),
+          members: 0, // TODO: Get from backend when available
           description: community.description,
           color: '#28f5cc',
-          avatar: community.avatar,
+          avatar: community.bannerUrl || undefined,
         }}
         onBack={() => setCurrentPage('main')}
         onGoToHome={onGoToHome}
@@ -103,7 +217,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
     return (
       <GeneralChat
         communityName={community.name}
-        communityAvatar={community.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
+        communityAvatar={community.bannerUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
         roomName={selectedRoom.name}
         userRole={userRole}
         currentUser={currentUser}
@@ -120,7 +234,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
     return (
       <AnnouncementChat
         communityName={community.name}
-        communityAvatar={community.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
+        communityAvatar={community.bannerUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
         roomName={selectedRoom.name}
         userRole={userRole}
         currentUser={currentUser}
@@ -137,7 +251,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
     return (
       <DMChat
         communityName={community.name}
-        communityAvatar={community.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
+        communityAvatar={community.bannerUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
         targetUser={dmTarget}
         userRole={userRole}
         currentUser={currentUser}
@@ -155,7 +269,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
       <VoiceCallRoom
         roomName={selectedRoom.name}
         communityName={community.name}
-        communityAvatar={community.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
+        communityAvatar={community.bannerUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
         userRole={userRole}
         onBack={() => {
           setCurrentPage('main');
@@ -173,7 +287,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
       <MemesPostsPage
         roomName={selectedRoom.name}
         communityName={community.name}
-        communityAvatar={community.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
+        communityAvatar={community.bannerUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
         userRole={userRole}
         onBack={handleBackToMain}
         onGoToHome={onGoToHome}
@@ -196,6 +310,17 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
     );
   }
 
+  // Map rooms to frontend format for StackedRoomCards
+  const mappedRooms = rooms.map(room => ({
+    id: room.id.toString(),
+    name: room.name,
+    description: room.config || '',
+    activeUsers: 0, // TODO: Get from backend when available
+    type: mapRoomTypeToFrontend(room.type),
+    frontendType: mapRoomTypeToFrontend(room.type),
+    ...room, // Include original room data
+  }));
+
   // Main Community Page
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
@@ -205,9 +330,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
       {/* Sidebar */}
       <CommunitySidebar
         communityName={community.name}
-        communityAvatar={
-          community.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'
-        }
+        communityAvatar={community.bannerUrl || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop'}
         userRole={userRole}
         currentUser={currentUser}
         onNavigate={handleNavigate}
@@ -227,9 +350,8 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
             borderBottom: '1px solid rgba(40, 245, 204, 0.2)',
           }}
         >
-          {/* Centered Community Logo */}
+          {/* Centered Community Info */}
           <div className="flex items-center gap-6">
-           
             {/* Community Name & Stats */}
             <div className="flex flex-col items-start">
               <h2 className="text-white text-center mb-2">{community.name}</h2>
@@ -240,16 +362,7 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
                     style={{ boxShadow: '0 0 8px rgba(40, 245, 204, 0.6)' }}
                   />
                   <span className="text-[#747c88]" style={{ fontSize: '0.675rem' }}>
-                    {community.members.toLocaleString()} Total Members
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div 
-                    className="w-2 h-2 rounded-full bg-[#28f5cc]" 
-                    style={{ boxShadow: '0 0 8px rgba(40, 245, 204, 0.6)' }}
-                  />
-                  <span className="text-[#747c88]" style={{ fontSize: '0.675rem' }}>
-                    {Math.floor(community.members * 0.15).toLocaleString()} Active Now
+                    {mapTypeToCategory(community.type)}
                   </span>
                 </div>
               </div>
@@ -259,9 +372,24 @@ export function CommunityPage({ community, userRole, onBack, onGoToHome, onGoToU
 
         {/* Stacked Room Cards - Expanded Space */}
         <div className="relative" style={{ height: 'calc(100vh - 5rem)' }}>
-          <StackedRoomCards onRoomSelect={handleRoomSelect} />
+          <StackedRoomCards 
+            onRoomSelect={handleRoomSelect}
+            rooms={mappedRooms}
+            onCreateRoom={() => setIsCreateRoomModalOpen(true)}
+            canCreateRoom={userRole === 'Owner' || userRole === 'Admin'}
+          />
         </div>
       </div>
+
+      {/* Create Room Modal */}
+      <CreateRoomModal
+        isOpen={isCreateRoomModalOpen}
+        onClose={() => setIsCreateRoomModalOpen(false)}
+        onCreateRoom={async () => {
+          await handleRoomCreated();
+        }}
+        communityId={communityId}
+      />
     </div>
   );
 }

@@ -1,10 +1,11 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { createUser, UserDto } from '../api/userApi';
 
 interface User {
-  id: string;
+  id: number;
   username: string;
   email: string;
-  avatar: string;
+  avatar: string; // Maps to avatarUrl from backend
   age?: number;
 }
 
@@ -27,7 +28,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedUser = localStorage.getItem('comverse_user');
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        const parsedUser = JSON.parse(storedUser);
+        // Ensure id is a number
+        if (parsedUser.id) {
+          parsedUser.id = typeof parsedUser.id === 'string' ? parseInt(parsedUser.id, 10) : parsedUser.id;
+        }
+        setUser(parsedUser);
       } catch (e) {
         console.error('Failed to parse stored user:', e);
       }
@@ -35,13 +41,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (email: string, password: string) => {
-    // TODO: Replace with actual API call
+    // TODO: Replace with actual API call when auth is implemented
     // For now, simulate API call
     await new Promise(resolve => setTimeout(resolve, 800));
     
     // Mock user data - replace with actual API response
     const mockUser: User = {
-      id: '1',
+      id: 1,
       username: email.split('@')[0],
       email,
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + email,
@@ -52,20 +58,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signup = async (username: string, email: string, password: string, age: number, avatar: string) => {
-    // TODO: Replace with actual API call
-    // For now, simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const mockUser: User = {
-      id: Date.now().toString(),
-      username,
-      email,
-      avatar,
-      age,
-    };
-    
-    setUser(mockUser);
-    localStorage.setItem('comverse_user', JSON.stringify(mockUser));
+    try {
+      // Call backend API to create user
+      const userDto: UserDto = await createUser({
+        username,
+        email,
+        password, // Will be ignored for now (no auth yet)
+        avatarUrl: avatar,
+        age,
+      });
+
+      // Map backend UserDto to frontend User interface
+      const newUser: User = {
+        id: userDto.id,
+        username: userDto.username,
+        email: userDto.email,
+        avatar: userDto.avatarUrl || avatar,
+        age: userDto.age || undefined,
+      };
+      
+      setUser(newUser);
+      localStorage.setItem('comverse_user', JSON.stringify(newUser));
+    } catch (error) {
+      console.error('Failed to create user:', error);
+      throw error; // Re-throw to let the component handle the error
+    }
   };
 
   const loginWithGoogle = async () => {
@@ -73,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await new Promise(resolve => setTimeout(resolve, 800));
     
     const mockUser: User = {
-      id: 'google_' + Date.now(),
+      id: Date.now(),
       username: 'Google User',
       email: 'user@gmail.com',
       avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=google',

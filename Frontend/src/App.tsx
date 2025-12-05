@@ -7,6 +7,7 @@ import { UniverseCanvas, UniverseCanvasRef } from './components/UniverseCanvas';
 import { Planet3D } from './components/Planet3D';
 import { SpaceSearchBar } from './components/SpaceSearchBar';
 import { UserSpace } from './pages/UserSpace';
+import { UserProfile } from './pages/UserProfile';
 import { CommunityPage } from './pages/CommunityPage';
 import { CommunityDetail } from './pages/CommunityDetail';
 import { OpenCommunityButton } from './components/OpenCommunityButton';
@@ -103,7 +104,7 @@ export default function App() {
   const { isAuthenticated } = useAuth();
   
   // Navigation state
-  const [currentPage, setCurrentPage] = useState<'home' | 'userspace' | 'community'>('home');
+  const [currentPage, setCurrentPage] = useState<'home' | 'userspace' | 'community' | 'profile'>('home');
   const [selectedCommunity, setSelectedCommunity] = useState<CommunityWithVisuals | null>(null);
 
   const [selectedPlanet, setSelectedPlanet] = useState<number | null>(null);
@@ -180,6 +181,11 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleEscape);
   }, []);
 
+  // Render User Profile page
+  if (currentPage === 'profile') {
+    return <UserProfile onBack={() => setCurrentPage('home')} />;
+  }
+
   // Render User Space page
   if (currentPage === 'userspace') {
     return <UserSpace onBackToHome={() => setCurrentPage('home')} />;
@@ -189,15 +195,8 @@ export default function App() {
   if (currentPage === 'community' && selectedCommunity) {
     return (
       <CommunityPage
-        community={{
-          name: selectedCommunity.name,
-          description: selectedCommunity.description,
-          members: selectedCommunity.members,
-          category: selectedCommunity.category,
-          avatar: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop',
-          banner: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&h=300&fit=crop',
-        }}
-        userRole="Owner"
+        communityId={selectedCommunity.id}
+        userRole="Owner" // TODO: Get actual user role from backend
         onBack={() => {
           setCurrentPage('home');
           setSelectedPlanet(null);
@@ -232,8 +231,7 @@ export default function App() {
         }}
         onNavigateToUserSpace={() => setCurrentPage('userspace')}
         onNavigateToProfile={() => {
-          // Navigate to profile - could be handled within UserSpace or separate page
-          setCurrentPage('userspace');
+          setCurrentPage('profile');
         }}
         onNavigateToSettings={() => {
           // Navigate to settings - placeholder for future implementation

@@ -135,7 +135,8 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
       await signup(username, signupEmail, signupPassword, parseInt(age), avatarUrl || '');
       onClose();
     } catch (err) {
-      setError('Failed to create account. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

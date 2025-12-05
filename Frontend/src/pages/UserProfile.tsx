@@ -1,115 +1,78 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { ArrowLeft, MapPin, Calendar, Heart, MessageCircle, Share2, Plus } from 'lucide-react';
 import { UserSpaceBackground } from '../components/UserSpaceBackground';
 import { CreateCommunityModal } from '../components/CreateCommunityModal';
+import { useAuth } from '../contexts/AuthContext';
+import { getUser, getUserCommunities } from '../api/userApi';
+import { getUserPosts, getUserRecentPosts } from '../api/postApi';
+import { CommunityDto } from '../api/communityApi';
+import { PostDto } from '../api/postApi';
 
 interface UserProfileProps {
   onBack: () => void;
 }
 
-// User data
-const userData = {
-  name: 'Alex Rivera',
-  tagline: 'Tech Enthusiast | Digital Creator | Community Builder',
-  avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&h=200&fit=crop',
-  bannerImage: 'https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&h=300&fit=crop',
-  location: 'San Francisco, CA',
-  joinedDate: 'January 2024',
-};
-
-// User communities with roles
-const userCommunities = [
-  {
-    id: 1,
-    name: 'Tech Pioneers',
-    avatar: 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=100&h=100&fit=crop',
-    role: 'Owner',
-    color: '#28f5cc',
-  },
-  {
-    id: 2,
-    name: 'Cosmic Creators',
-    avatar: 'https://images.unsplash.com/photo-1561998338-13ad7883b20f?w=100&h=100&fit=crop',
-    role: 'Admin',
-    color: '#04ad7b',
-  },
-  {
-    id: 3,
-    name: 'Gaming Nebula',
-    avatar: 'https://images.unsplash.com/photo-1511512578047-dfb367046420?w=100&h=100&fit=crop',
-    role: 'Member',
-    color: '#28f5cc',
-  },
-  {
-    id: 4,
-    name: 'Science Sphere',
-    avatar: 'https://images.unsplash.com/photo-1507413245164-6160d8298b31?w=100&h=100&fit=crop',
-    role: 'Member',
-    color: '#04ad7b',
-  },
-  {
-    id: 5,
-    name: 'Code Cluster',
-    avatar: 'https://images.unsplash.com/photo-1461749280684-dccba630e2f6?w=100&h=100&fit=crop',
-    role: 'Admin',
-    color: '#28f5cc',
-  },
-  {
-    id: 6,
-    name: 'Wellness World',
-    avatar: 'https://images.unsplash.com/photo-1506126613408-eca07ce68773?w=100&h=100&fit=crop',
-    role: 'Member',
-    color: '#04ad7b',
-  },
-];
-
-// User posts
-const userPosts = [
-  {
-    id: 1,
-    timestamp: '2 hours ago',
-    content: 'Just launched a new open-source project exploring quantum computing algorithms! Excited to see where this goes. Check it out and let me know your thoughts! 🚀',
-    image: 'https://images.unsplash.com/photo-1635070041078-e363dbe005cb?w=600&h=300&fit=crop',
-    likes: 127,
-    comments: 23,
-  },
-  {
-    id: 2,
-    timestamp: '1 day ago',
-    content: 'Attended an amazing virtual conference on the future of AI and machine learning. The innovations happening in this space are truly mind-blowing. Key takeaway: ethical AI development is more important than ever.',
-    likes: 89,
-    comments: 15,
-  },
-  {
-    id: 3,
-    timestamp: '3 days ago',
-    content: 'Big thanks to everyone in the Tech Pioneers community for the incredible feedback on our latest hackathon! Your creativity and passion continue to inspire me every day. 💚',
-    image: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=600&h=300&fit=crop',
-    likes: 203,
-    comments: 42,
-  },
-  {
-    id: 4,
-    timestamp: '5 days ago',
-    content: 'Working on improving my design skills this month. Any recommendations for learning resources or communities focused on UI/UX? Always looking to grow!',
-    likes: 64,
-    comments: 28,
-  },
-  {
-    id: 5,
-    timestamp: '1 week ago',
-    content: 'Excited to announce I\'ll be hosting a workshop on building scalable web applications next month! Stay tuned for more details. Limited spots available. 🌟',
-    image: 'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=600&h=300&fit=crop',
-    likes: 156,
-    comments: 37,
-  },
-];
-
-const recentPosts = userPosts.slice(0, 3);
-
 export function UserProfile({ onBack }: UserProfileProps) {
+  const { user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'recent'>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  
+  // State for fetched data
+  const [userData, setUserData] = useState<{
+    id: number;
+    username: string;
+    email: string;
+    avatarUrl: string | null;
+    age: number | null;
+  } | null>(null);
+  const [userCommunities, setUserCommunities] = useState<CommunityDto[]>([]);
+  const [userPosts, setUserPosts] = useState<PostDto[]>([]);
+  const [recentPosts, setRecentPosts] = useState<PostDto[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch user data on mount
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (!authUser?.id) {
+        setIsLoading(false);
+        return;
+      }
+
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        const userId = typeof authUser.id === 'string' ? parseInt(authUser.id, 10) : authUser.id;
+        
+        // Fetch user, communities, and posts in parallel
+        const [user, communities, posts, recent] = await Promise.all([
+          getUser(userId),
+          getUserCommunities(userId),
+          getUserPosts(userId),
+          getUserRecentPosts(userId),
+        ]);
+
+        setUserData({
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          avatarUrl: user.avatarUrl,
+          age: user.age,
+        });
+        setUserCommunities(communities);
+        setUserPosts(posts);
+        setRecentPosts(recent);
+      } catch (err) {
+        console.error('Failed to fetch user data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load profile');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchUserData();
+  }, [authUser?.id]);
 
   const displayPosts = activeTab === 'all' ? userPosts : recentPosts;
 
@@ -146,6 +109,40 @@ export function UserProfile({ onBack }: UserProfileProps) {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="relative min-h-screen w-full overflow-y-auto">
+        <UserSpaceBackground />
+        <div className="relative z-10 flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-[#28f5cc] mb-4"></div>
+            <p className="text-[#747c88]">Loading profile...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !userData) {
+    return (
+      <div className="relative min-h-screen w-full overflow-y-auto">
+        <UserSpaceBackground />
+        <div className="relative z-10 flex items-center justify-center min-h-screen">
+          <div className="text-center max-w-md px-4">
+            <p className="text-red-400 mb-2">Failed to load profile</p>
+            <p className="text-[#747c88] text-sm">{error || 'User not found'}</p>
+            <button
+              onClick={onBack}
+              className="mt-4 px-4 py-2 rounded-lg bg-[#28f5cc] text-black hover:bg-[#04ad7b] transition-colors"
+            >
+              Go Back
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen w-full overflow-y-auto">
       {/* Background */}
@@ -166,8 +163,6 @@ export function UserProfile({ onBack }: UserProfileProps) {
         <span className="text-white text-sm">Back</span>
       </button>
 
-      
-
       {/* Content Container */}
       <div className="relative z-10 max-w-5xl mx-auto pt-8 pb-20">
         {/* Profile Header */}
@@ -180,11 +175,13 @@ export function UserProfile({ onBack }: UserProfileProps) {
               border: '1px solid rgba(40, 245, 204, 0.1)',
             }}
           >
-            <img
-              src={userData.bannerImage}
-              alt="Profile Banner"
-              className="w-full h-full object-cover opacity-40"
-            />
+            {userData.avatarUrl && (
+              <img
+                src={userData.avatarUrl}
+                alt="Profile Banner"
+                className="w-full h-full object-cover opacity-40"
+              />
+            )}
             <div
               className="absolute inset-0"
               style={{
@@ -203,8 +200,8 @@ export function UserProfile({ onBack }: UserProfileProps) {
               }}
             >
               <img
-                src={userData.avatar}
-                alt={userData.name}
+                src={userData.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + userData.username}
+                alt={userData.username}
                 className="w-full h-full object-cover"
               />
             </div>
@@ -213,114 +210,110 @@ export function UserProfile({ onBack }: UserProfileProps) {
 
         {/* User Info - Below Avatar */}
         <div className="text-center mt-24 mb-12 px-4">
-          <h1 className="text-white text-4xl mb-2">{userData.name}</h1>
-          <p className="text-[#747c88] text-lg mb-4">{userData.tagline}</p>
+          <h1 className="text-white text-4xl mb-2">{userData.username}</h1>
+          <p className="text-[#747c88] text-lg mb-4">{userData.email}</p>
           <div className="flex items-center justify-center gap-6 text-[#747c88] text-sm">
-            <div className="flex items-center gap-2">
-              <MapPin className="w-4 h-4" />
-              <span>{userData.location}</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Calendar className="w-4 h-4" />
-              <span>Joined {userData.joinedDate}</span>
-            </div>
+            {userData.age && (
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4" />
+                <span>Age: {userData.age}</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Communities Section */}
         <div className="px-4 mb-12">
           <h2 className="text-white text-2xl mb-6">My Communities</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {userCommunities.map((community) => (
-              <div
-                key={community.id}
-                className="rounded-xl p-5 transition-all duration-300 hover:scale-105 cursor-pointer"
-                style={{
-                  background: 'rgba(4, 55, 47, 0.2)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(40, 245, 204, 0.2)',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(40, 245, 204, 0.4)';
-                  e.currentTarget.style.boxShadow = '0 0 20px rgba(40, 245, 204, 0.2)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.border = '1px solid rgba(40, 245, 204, 0.2)';
-                  e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
-                }}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <img
-                    src={community.avatar}
-                    alt={community.name}
-                    className="w-12 h-12 rounded-lg object-cover"
-                    style={{
-                      border: `1px solid ${community.color}40`,
-                    }}
-                  />
-                  <div className="flex-1">
-                    <h3 className="text-white">{community.name}</h3>
+          {userCommunities.length === 0 ? (
+            <div className="text-center py-12 text-[#747c88]">
+              <p>You haven't joined any communities yet.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {userCommunities.map((community) => (
+                <div
+                  key={community.id}
+                  className="rounded-xl p-5 transition-all duration-300 hover:scale-105 cursor-pointer"
+                  style={{
+                    background: 'rgba(4, 55, 47, 0.2)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(40, 245, 204, 0.2)',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.border = '1px solid rgba(40, 245, 204, 0.4)';
+                    e.currentTarget.style.boxShadow = '0 0 20px rgba(40, 245, 204, 0.2)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.border = '1px solid rgba(40, 245, 204, 0.2)';
+                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
+                  }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div
+                      className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold"
+                      style={{
+                        background: community.bannerUrl || 'linear-gradient(135deg, #04ad7b 0%, #28f5cc 100%)',
+                      }}
+                    >
+                      {community.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-white">{community.name}</h3>
+                    </div>
                   </div>
                 </div>
-                <div className="flex justify-end">
-                  <span
-                    className="text-xs px-3 py-1 rounded-full"
-                    style={getRoleBadgeStyle(community.role)}
-                  >
-                    {community.role}
-                  </span>
+              ))}
+              {/* Create Community Button Card */}
+              <div
+                onClick={() => setIsCreateModalOpen(true)}
+                className="
+                  flex flex-col items-center justify-center
+                  rounded-xl p-5 cursor-pointer transition-all duration-300
+                  hover:scale-105
+                "
+                style={{
+                  background: 'rgba(4, 55, 47, 0.25)',
+                  backdropFilter: 'blur(12px)',
+                  border: '1.5px solid rgba(40, 245, 204, 0.35)',
+                  boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.55)';
+                  e.currentTarget.style.boxShadow =
+                    '0 12px 35px rgba(40, 245, 204, 0.30)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.35)';
+                  e.currentTarget.style.boxShadow =
+                    '0 6px 20px rgba(0, 0, 0, 0.35)';
+                }}
+              >
+                <div
+                  className="flex items-center justify-center mb-3 rounded-full"
+                  style={{
+                    width: '68px',
+                    height: '68px',
+                    background: 'linear-gradient(135deg, #04ad7b 0%, #28f5cc 100%)',
+                    boxShadow: '0 0 22px rgba(40, 245, 204, 0.45)',
+                    border: '1.5px solid rgba(4, 173, 123, 0.4)',
+                  }}
+                >
+                  <Plus className="w-7 h-7 text-white" />
                 </div>
-              </div>
-            ))}
-            {/* Create Community Button Card */}
-<div
-  onClick={() => setIsCreateModalOpen(true)}
-  className="
-    flex flex-col items-center justify-center
-    rounded-xl p-5 cursor-pointer transition-all duration-300
-    hover:scale-105
-  "
-  style={{
-    background: 'rgba(4, 55, 47, 0.25)',
-    backdropFilter: 'blur(12px)',
-    border: '1.5px solid rgba(40, 245, 204, 0.35)',
-    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
-  }}
-  onMouseEnter={(e) => {
-    e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.55)';
-    e.currentTarget.style.boxShadow =
-      '0 12px 35px rgba(40, 245, 204, 0.30)';
-  }}
-  onMouseLeave={(e) => {
-    e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.35)';
-    e.currentTarget.style.boxShadow =
-      '0 6px 20px rgba(0, 0, 0, 0.35)';
-  }}
->
-  <div
-    className="flex items-center justify-center mb-3 rounded-full"
-    style={{
-      width: '68px',
-      height: '68px',
-      background: 'linear-gradient(135deg, #04ad7b 0%, #28f5cc 100%)',
-      boxShadow: '0 0 22px rgba(40, 245, 204, 0.45)',
-      border: '1.5px solid rgba(4, 173, 123, 0.4)',
-    }}
-  >
-    <Plus className="w-7 h-7 text-white" />
-  </div>
 
-  <span
-    className="text-white font-semibold text-lg tracking-wide"
-    style={{
-      textShadow: '0 0 10px rgba(40, 245, 204, 0.4)',
-    }}
-  >
-    Create Community
-  </span>
-</div>
-          </div>
+                <span
+                  className="text-white font-semibold text-lg tracking-wide"
+                  style={{
+                    textShadow: '0 0 10px rgba(40, 245, 204, 0.4)',
+                  }}
+                >
+                  Create Community
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Posts Section */}
@@ -366,74 +359,73 @@ export function UserProfile({ onBack }: UserProfileProps) {
           </div>
 
           {/* Posts Feed */}
-          <div
-            key={activeTab}
-            className="space-y-4 animate-in fade-in duration-200"
-          >
-            {displayPosts.map((post) => (
-              <div
-                key={post.id}
-                className="rounded-xl p-6 transition-all duration-300"
-                style={{
-                  background: 'rgba(4, 55, 47, 0.15)',
-                  backdropFilter: 'blur(10px)',
-                  border: '1px solid rgba(40, 245, 204, 0.15)',
-                  boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-                }}
-              >
-                {/* Post Header */}
-                <div className="flex items-center gap-3 mb-4">
-                  <img
-                    src={userData.avatar}
-                    alt={userData.name}
-                    className="w-10 h-10 rounded-full"
-                    style={{
-                      border: '2px solid rgba(40, 245, 204, 0.3)',
-                    }}
-                  />
-                  <div className="flex-1">
-                    <h4 className="text-white">{userData.name}</h4>
-                    <p className="text-[#747c88] text-sm">{post.timestamp}</p>
-                  </div>
-                </div>
-
-                {/* Post Content */}
-                <p className="text-white mb-4 leading-relaxed">{post.content}</p>
-
-                {/* Post Image (if exists) */}
-                {post.image && (
-                  <div className="mb-4 rounded-lg overflow-hidden">
+          {displayPosts.length === 0 ? (
+            <div className="text-center py-12 text-[#747c88]">
+              <p>No posts yet. Start sharing your thoughts!</p>
+            </div>
+          ) : (
+            <div
+              key={activeTab}
+              className="space-y-4 animate-in fade-in duration-200"
+            >
+              {displayPosts.map((post) => (
+                <div
+                  key={post.id}
+                  className="rounded-xl p-6 transition-all duration-300"
+                  style={{
+                    background: 'rgba(4, 55, 47, 0.15)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(40, 245, 204, 0.15)',
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+                  }}
+                >
+                  {/* Post Header */}
+                  <div className="flex items-center gap-3 mb-4">
                     <img
-                      src={post.image}
-                      alt="Post content"
-                      className="w-full h-64 object-cover"
+                      src={userData.avatarUrl || 'https://api.dicebear.com/7.x/avataaars/svg?seed=' + userData.username}
+                      alt={userData.username}
+                      className="w-10 h-10 rounded-full"
+                      style={{
+                        border: '2px solid rgba(40, 245, 204, 0.3)',
+                      }}
                     />
+                    <div className="flex-1">
+                      <h4 className="text-white">{userData.username}</h4>
+                      <p className="text-[#747c88] text-sm">
+                        {post.createdAt ? new Date(post.createdAt).toLocaleDateString() : 'Recently'}
+                      </p>
+                    </div>
                   </div>
-                )}
 
-                {/* Post Actions */}
-                <div className="flex items-center gap-6 pt-4 border-t border-[rgba(40,245,204,0.1)]">
-                  <button
-                    className="flex items-center gap-2 text-[#747c88] hover:text-[#28f5cc] transition-colors duration-200"
-                  >
-                    <Heart className="w-5 h-5" />
-                    <span className="text-sm">{post.likes}</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-2 text-[#747c88] hover:text-[#28f5cc] transition-colors duration-200"
-                  >
-                    <MessageCircle className="w-5 h-5" />
-                    <span className="text-sm">{post.comments}</span>
-                  </button>
-                  <button
-                    className="flex items-center gap-2 text-[#747c88] hover:text-[#28f5cc] transition-colors duration-200 ml-auto"
-                  >
-                    <Share2 className="w-5 h-5" />
-                  </button>
+                  {/* Post Content - Placeholder for now */}
+                  <p className="text-white mb-4 leading-relaxed">
+                    Post content will be displayed here when posts are fully implemented.
+                  </p>
+
+                  {/* Post Actions */}
+                  <div className="flex items-center gap-6 pt-4 border-t border-[rgba(40,245,204,0.1)]">
+                    <button
+                      className="flex items-center gap-2 text-[#747c88] hover:text-[#28f5cc] transition-colors duration-200"
+                    >
+                      <Heart className="w-5 h-5" />
+                      <span className="text-sm">{post.likeCount || 0}</span>
+                    </button>
+                    <button
+                      className="flex items-center gap-2 text-[#747c88] hover:text-[#28f5cc] transition-colors duration-200"
+                    >
+                      <MessageCircle className="w-5 h-5" />
+                      <span className="text-sm">{post.commentCount || 0}</span>
+                    </button>
+                    <button
+                      className="flex items-center gap-2 text-[#747c88] hover:text-[#28f5cc] transition-colors duration-200 ml-auto"
+                    >
+                      <Share2 className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

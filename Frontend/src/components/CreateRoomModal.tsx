@@ -1,6 +1,35 @@
 import { useState, useEffect } from 'react';
 import { X, Hash, Sparkles } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { createRoom, RoomType } from '../api/roomApi';
+
+
+// Map frontend display names to backend RoomType enum
+const ROOM_TYPE_MAP: Record<string, RoomType> = {
+  'General Chat': RoomType.CHAT,
+  'Announcements': RoomType.CHAT,
+  'Voice Channel': RoomType.VOICE_CHAT,
+  'Memes & Fun': RoomType.POSTS,
+  'Project Discussion': RoomType.CHAT,
+  'Events & Meetups': RoomType.CHAT,
+  'Support & Help': RoomType.CHAT,
+  'Off-Topic': RoomType.CHAT,
+  'Resources': RoomType.CHAT,
+  'Q&A': RoomType.CHAT,
+};
+
+const ROOM_TYPES = [
+  'General Chat',
+  'Announcements',
+  'Voice Channel',
+  'Memes & Fun',
+  'Project Discussion',
+  'Events & Meetups',
+  'Support & Help',
+  'Off-Topic',
+  'Resources',
+  'Q&A',
+];
 
 interface CreateRoomModalProps {
   isOpen: boolean;
@@ -19,28 +48,17 @@ interface CreateRoomModalProps {
     roomType?: string;
     isPrivate?: boolean;
   };
+  communityId?: number; // Add communityId prop
 }
 
-const ROOM_TYPES = [
-  'General Chat',
-  'Announcements',
-  'Voice Channel',
-  'Memes & Fun',
-  'Project Discussion',
-  'Events & Meetups',
-  'Support & Help',
-  'Off-Topic',
-  'Resources',
-  'Q&A',
-];
-
-export function CreateRoomModal({ isOpen, onClose, onCreateRoom, editMode = false, roomData }: CreateRoomModalProps) {
+export function CreateRoomModal({ isOpen, onClose, onCreateRoom, editMode = false, roomData, communityId }: CreateRoomModalProps) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [roomType, setRoomType] = useState('');
   const [isPrivate, setIsPrivate] = useState(false);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Prefill form when in edit mode
   useEffect(() => {
@@ -60,31 +78,53 @@ export function CreateRoomModal({ isOpen, onClose, onCreateRoom, editMode = fals
 
   const handleCreate = async () => {
     if (!name.trim() || !description.trim() || !roomType) {
+      setError('Please fill in all required fields');
+      return;
+    }
+
+    if (!communityId) {
+      setError('Community ID is required');
       return;
     }
 
     setIsSaving(true);
+    setError(null);
 
-    // Simulate save delay
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      const backendType = ROOM_TYPE_MAP[roomType];
+      if (!backendType) {
+        throw new Error('Invalid room type');
+      }
 
-    onCreateRoom({
-      name,
-      description,
-      roomType,
-      isPrivate,
-    });
+      const createdRoom = await createRoom(communityId, {
+        name: name.trim(),
+        type: backendType,
+        config: description.trim() || null,
+        isDefaultRoom: false,
+      });
 
-    setIsSaving(false);
+      // Call the callback with the created room
+      onCreateRoom({
+        name: createdRoom.name,
+        description: description.trim(),
+        roomType: roomType,
+        isPrivate: isPrivate,
+      });
 
-    // Reset form
-    if (!editMode) {
-      setName('');
-      setDescription('');
-      setRoomType('');
-      setIsPrivate(false);
+      // Reset form
+      if (!editMode) {
+        setName('');
+        setDescription('');
+        setRoomType('');
+        setIsPrivate(false);
+      }
+      onClose();
+    } catch (err) {
+      console.error('Failed to create room:', err);
+      setError(err instanceof Error ? err.message : 'Failed to create room. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
-    onClose();
   };
 
   const isFormValid = name.trim() && description.trim() && roomType;
@@ -126,6 +166,13 @@ export function CreateRoomModal({ isOpen, onClose, onCreateRoom, editMode = fals
 
         {/* Form Content */}
         <div className="px-8 py-6 space-y-6 flex-1 overflow-y-auto">
+          {/* Error Message */}
+          {error && (
+            <div className="p-3 rounded-lg bg-red-500/20 border border-red-500/50 text-red-300 text-sm">
+              {error}
+            </div>
+          )}
+          
           {/* Room Name */}
           <div>
             <label className="block text-white mb-2">Room Name</label>
