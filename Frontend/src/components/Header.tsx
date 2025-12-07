@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Avatar, AvatarImage, AvatarFallback } from './ui/avatar';
 import {
@@ -11,39 +12,30 @@ import { User, Settings, LogOut, Sparkles } from 'lucide-react';
 
 interface HeaderProps {
   onOpenAuth: (mode: 'signin' | 'signup') => void;
-  onNavigateToHome?: () => void;
   onNavigateToUserSpace?: () => void;
   onNavigateToProfile?: () => void;
   onNavigateToSettings?: () => void;
 }
 
-export function Header({ onOpenAuth, onNavigateToHome, onNavigateToUserSpace, onNavigateToProfile, onNavigateToSettings }: HeaderProps) {
+export function Header({ onOpenAuth, onNavigateToUserSpace, onNavigateToProfile, onNavigateToSettings }: HeaderProps) {
+  const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
 
   return (
     <header className="fixed top-0 left-0 right-0 z-50 px-8 py-6">
       <div className="max-w-7xl mx-auto flex items-center justify-between">
         {/* Logo */}
-        <div className="flex items-center gap-3">
+        <button 
+          onClick={() => navigate('/')}
+          className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity"
+        >
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#04ad7b] to-[#28f5cc] flex items-center justify-center" style={{ boxShadow: '0 0 10px rgba(40, 245, 204, 0.4)' }}>
             <span className="text-xl">✦</span>
           </div>
           <span className="text-2xl tracking-wider glow-text">ComVerse</span>
-        </div>
+        </button>
 
-        {/* Navigation - Show Home when logged in, hide Explore/About */}
-        {isAuthenticated && (
-          <nav className="flex items-center gap-6">
-            <button 
-              onClick={() => {
-                onNavigateToHome?.();
-              }}
-              className="text-[#747c88] hover:text-[#28f5cc] transition-colors"
-            >
-              Home
-            </button>
-          </nav>
-        )}
+        {/* Navigation - Removed Home button per requirements */}
 
         {/* Auth Buttons or User Avatar */}
         <div className="flex items-center gap-4">
@@ -92,7 +84,11 @@ export function Header({ onOpenAuth, onNavigateToHome, onNavigateToUserSpace, on
                 <DropdownMenuItem
                   className="text-white hover:bg-[#28f5cc]/10 hover:text-[#28f5cc] cursor-pointer"
                   onClick={() => {
-                    onNavigateToProfile?.();
+                    if (onNavigateToProfile) {
+                      onNavigateToProfile();
+                    } else {
+                      navigate('/profile');
+                    }
                   }}
                 >
                   <User className="w-4 h-4 mr-2" />
@@ -101,7 +97,11 @@ export function Header({ onOpenAuth, onNavigateToHome, onNavigateToUserSpace, on
                 <DropdownMenuItem
                   className="text-white hover:bg-[#28f5cc]/10 hover:text-[#28f5cc] cursor-pointer"
                   onClick={() => {
-                    onNavigateToUserSpace?.();
+                    if (onNavigateToUserSpace) {
+                      onNavigateToUserSpace();
+                    } else {
+                      navigate('/userspace');
+                    }
                   }}
                 >
                   <Sparkles className="w-4 h-4 mr-2" />

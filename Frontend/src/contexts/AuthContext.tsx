@@ -13,7 +13,7 @@ interface AuthContextType {
   user: User | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (username: string, email: string, password: string, age: number, avatar: string) => Promise<void>;
+  signup: (username: string, email: string, password: string, age: number, avatar: string, banner?: string) => Promise<void>;
   logout: () => void;
   loginWithGoogle: () => Promise<void>;
 }
@@ -57,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('comverse_user', JSON.stringify(mockUser));
   };
 
-  const signup = async (username: string, email: string, password: string, age: number, avatar: string) => {
+  const signup = async (username: string, email: string, password: string, age: number, avatar: string, banner?: string) => {
     try {
       // Call backend API to create user
       const userDto: UserDto = await createUser({
@@ -65,6 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email,
         password, // Will be ignored for now (no auth yet)
         avatarUrl: avatar,
+        bannerUrl: banner,
         age,
       });
 

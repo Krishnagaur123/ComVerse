@@ -143,9 +143,21 @@ export function CreateCommunityModal({ isOpen, onClose, onCreateCommunity, editM
         setBannerPreview(null);
       }
       onClose();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to create community:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create community. Please try again.');
+      // Handle API response errors
+      if (err.message) {
+        setError(err.message);
+      } else if (err.response) {
+        try {
+          const errorData = await err.response.json();
+          setError(errorData.message || 'Failed to create community. Please try again.');
+        } catch {
+          setError('Failed to create community. Please try again.');
+        }
+      } else {
+        setError('Failed to create community. Please try again.');
+      }
     } finally {
       setIsSaving(false);
     }

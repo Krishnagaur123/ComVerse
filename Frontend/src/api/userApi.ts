@@ -15,6 +15,7 @@ export interface UserDto {
   email: string;
   password?: string; // Optional, not returned in responses
   avatarUrl: string | null;
+  bannerUrl: string | null;
   age: number | null;
 }
 
@@ -26,6 +27,7 @@ export interface CreateUserRequest {
   email: string;
   password?: string; // Optional for now (no auth yet)
   avatarUrl: string;
+  bannerUrl?: string;
   age: number;
 }
 
@@ -108,6 +110,33 @@ export const getUserCommunities = async (userId: number) => {
     return data;
   } catch (error) {
     console.error('Error fetching user communities:', error);
+    throw error;
+  }
+};
+
+/**
+ * Fetches communities for a specific user with enhanced details (member count, user role)
+ * @param userId - The ID of the user
+ * @returns Promise resolving to array of UserCommunityDto
+ * @throws Error if the API call fails
+ */
+export const getUserCommunitiesWithDetails = async (userId: number) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/users/${userId}/communities/details`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user communities: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching user communities with details:', error);
     throw error;
   }
 };

@@ -136,7 +136,9 @@ function FloatingRoomCard3D({ room, pos, onSelect, isOwner, isCentered, isOtherC
               </div>
 
               <h3 className="text-white font-semibold leading-tight mb-2" style={{ minHeight: 48, fontSize: isCentered ? "20px" : "18px" }}>{room.name}</h3>
-              <p className="line-clamp-2 mb-3" style={{ color: "#a0aec0", fontSize: "13px" }}>{room.description}</p>
+              <p className="line-clamp-2 mb-3" style={{ color: "#a0aec0", fontSize: "13px" }}>
+                {room.description || (room.type === 'announcements' ? 'Announcements and important updates for this community.' : '')}
+              </p>
             </div>
 
             <div className="flex items-center justify-between" style={{ fontSize: isCentered ? "13px" : "12px" }}>
@@ -533,7 +535,7 @@ export function StackedRoomCards({
                           
                           <h4 className="text-white mb-2.5" style={{ fontWeight: '600' }}>{stackRooms[0]?.name || 'No rooms'}</h4>
                           <p className="text-[#747c88] mb-5" style={{ fontSize: '0.9375rem', lineHeight: '1.5' }}>
-                            {stackRooms[0]?.description || ''}
+                            {stackRooms[0]?.description || (stackRooms[0]?.type === 'announcements' ? 'Announcements and important updates for this community.' : '')}
                           </p>
                           <div className="mt-auto flex items-center gap-2.5">
                             <div 

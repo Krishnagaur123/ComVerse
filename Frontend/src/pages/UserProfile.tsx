@@ -1,18 +1,17 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, MapPin, Calendar, Heart, MessageCircle, Share2, Plus } from 'lucide-react';
 import { UserSpaceBackground } from '../components/UserSpaceBackground';
 import { CreateCommunityModal } from '../components/CreateCommunityModal';
+import { CommunityCard } from '../components/CommunityCard';
 import { useAuth } from '../contexts/AuthContext';
-import { getUser, getUserCommunities } from '../api/userApi';
+import { getUser, getUserCommunitiesWithDetails } from '../api/userApi';
 import { getUserPosts, getUserRecentPosts } from '../api/postApi';
-import { CommunityDto } from '../api/communityApi';
+import { UserCommunityDto } from '../api/communityApi';
 import { PostDto } from '../api/postApi';
 
-interface UserProfileProps {
-  onBack: () => void;
-}
-
-export function UserProfile({ onBack }: UserProfileProps) {
+export function UserProfile() {
+  const navigate = useNavigate();
   const { user: authUser } = useAuth();
   const [activeTab, setActiveTab] = useState<'all' | 'recent'>('all');
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -23,9 +22,10 @@ export function UserProfile({ onBack }: UserProfileProps) {
     username: string;
     email: string;
     avatarUrl: string | null;
+    bannerUrl: string | null;
     age: number | null;
   } | null>(null);
-  const [userCommunities, setUserCommunities] = useState<CommunityDto[]>([]);
+  const [userCommunities, setUserCommunities] = useState<UserCommunityDto[]>([]);
   const [userPosts, setUserPosts] = useState<PostDto[]>([]);
   const [recentPosts, setRecentPosts] = useState<PostDto[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,7 +48,7 @@ export function UserProfile({ onBack }: UserProfileProps) {
         // Fetch user, communities, and posts in parallel
         const [user, communities, posts, recent] = await Promise.all([
           getUser(userId),
-          getUserCommunities(userId),
+          getUserCommunitiesWithDetails(userId),
           getUserPosts(userId),
           getUserRecentPosts(userId),
         ]);
@@ -58,6 +58,7 @@ export function UserProfile({ onBack }: UserProfileProps) {
           username: user.username,
           email: user.email,
           avatarUrl: user.avatarUrl,
+          bannerUrl: user.bannerUrl || null,
           age: user.age,
         });
         setUserCommunities(communities);
@@ -76,15 +77,47 @@ export function UserProfile({ onBack }: UserProfileProps) {
 
   const displayPosts = activeTab === 'all' ? userPosts : recentPosts;
 
-  const handleCreateCommunity = (data: {
+  const handleCreateCommunity = async (data: {
     name: string;
     description: string;
     bannerUrl: string;
     communityType: string;
   }) => {
-    console.log('Creating community:', data);
-    // Here you would typically send the data to your backend
+    // The CreateCommunityModal already handles the API call
+    // We just need to refresh the communities list
     setIsCreateModalOpen(false);
+    
+    // Refresh communities after creation
+    if (authUser?.id) {
+      try {
+        setIsLoading(true);
+        const userId = typeof authUser.id === 'string' ? parseInt(authUser.id, 10) : authUser.id;
+        // Re-fetch all user data including communities
+        const [user, communities, posts, recent] = await Promise.all([
+          getUser(userId),
+          getUserCommunitiesWithDetails(userId),
+          getUserPosts(userId),
+          getUserRecentPosts(userId),
+        ]);
+
+        setUserData({
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          avatarUrl: user.avatarUrl,
+          bannerUrl: user.bannerUrl || null,
+          age: user.age,
+        });
+        setUserCommunities(communities);
+        setUserPosts(posts);
+        setRecentPosts(recent);
+      } catch (err) {
+        console.error('Failed to refresh communities:', err);
+        setError(err instanceof Error ? err.message : 'Failed to refresh communities');
+      } finally {
+        setIsLoading(false);
+      }
+    }
   };
 
   const getRoleBadgeStyle = (role: string) => {
@@ -132,7 +165,7 @@ export function UserProfile({ onBack }: UserProfileProps) {
             <p className="text-red-400 mb-2">Failed to load profile</p>
             <p className="text-[#747c88] text-sm">{error || 'User not found'}</p>
             <button
-              onClick={onBack}
+              onClick={() => navigate(-1)}
               className="mt-4 px-4 py-2 rounded-lg bg-[#28f5cc] text-black hover:bg-[#04ad7b] transition-colors"
             >
               Go Back
@@ -150,7 +183,7 @@ export function UserProfile({ onBack }: UserProfileProps) {
 
       {/* Back Button */}
       <button
-        onClick={onBack}
+        onClick={() => navigate(-1)}
         className="fixed top-8 left-8 z-50 flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 hover:scale-105"
         style={{
           background: 'rgba(0, 0, 0, 0.6)',
@@ -171,15 +204,17 @@ export function UserProfile({ onBack }: UserProfileProps) {
           <div
             className="w-full h-64 rounded-2xl overflow-hidden relative"
             style={{
-              background: 'linear-gradient(135deg, rgba(4, 55, 47, 0.6) 0%, rgba(42, 52, 68, 0.6) 100%)',
+              background: userData.bannerUrl 
+                ? 'transparent'
+                : 'linear-gradient(135deg, rgba(4, 55, 47, 0.6) 0%, rgba(42, 52, 68, 0.6) 100%)',
               border: '1px solid rgba(40, 245, 204, 0.1)',
             }}
           >
-            {userData.avatarUrl && (
+            {userData.bannerUrl && (
               <img
-                src={userData.avatarUrl}
+                src={userData.bannerUrl}
                 alt="Profile Banner"
-                className="w-full h-full object-cover opacity-40"
+                className="w-full h-full object-cover"
               />
             )}
             <div
@@ -225,95 +260,67 @@ export function UserProfile({ onBack }: UserProfileProps) {
         {/* Communities Section */}
         <div className="px-4 mb-12">
           <h2 className="text-white text-2xl mb-6">My Communities</h2>
-          {userCommunities.length === 0 ? (
-            <div className="text-center py-12 text-[#747c88]">
-              <p>You haven't joined any communities yet.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {userCommunities.map((community) => (
-                <div
-                  key={community.id}
-                  className="rounded-xl p-5 transition-all duration-300 hover:scale-105 cursor-pointer"
-                  style={{
-                    background: 'rgba(4, 55, 47, 0.2)',
-                    backdropFilter: 'blur(10px)',
-                    border: '1px solid rgba(40, 245, 204, 0.2)',
-                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.border = '1px solid rgba(40, 245, 204, 0.4)';
-                    e.currentTarget.style.boxShadow = '0 0 20px rgba(40, 245, 204, 0.2)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.border = '1px solid rgba(40, 245, 204, 0.2)';
-                    e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
-                  }}
-                >
-                  <div className="flex items-center gap-3 mb-3">
-                    <div
-                      className="w-12 h-12 rounded-lg flex items-center justify-center text-white font-bold"
-                      style={{
-                        background: community.bannerUrl || 'linear-gradient(135deg, #04ad7b 0%, #28f5cc 100%)',
-                      }}
-                    >
-                      {community.name.charAt(0).toUpperCase()}
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-white">{community.name}</h3>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {/* Create Community Button Card */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {userCommunities.length === 0 ? (
+              <div className="text-center py-12 text-[#747c88] col-span-full">
+                <p>You haven't joined any communities yet.</p>
+              </div>
+            ) : (
+              userCommunities.map((community) => (
+                <CommunityCard 
+                  key={community.id} 
+                  community={community}
+                />
+              ))
+            )}
+            {/* Create Community Button Card - Always visible */}
+            <div
+              onClick={() => setIsCreateModalOpen(true)}
+              className="
+                flex flex-col items-center justify-center
+                rounded-xl p-5 cursor-pointer transition-all duration-300
+                hover:scale-105
+              "
+              style={{
+                background: 'rgba(4, 55, 47, 0.25)',
+                backdropFilter: 'blur(12px)',
+                border: '1.5px solid rgba(40, 245, 204, 0.35)',
+                boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.55)';
+                e.currentTarget.style.boxShadow =
+                  '0 12px 35px rgba(40, 245, 204, 0.30)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.35)';
+                e.currentTarget.style.boxShadow =
+                  '0 6px 20px rgba(0, 0, 0, 0.35)';
+              }}
+            >
               <div
-                onClick={() => setIsCreateModalOpen(true)}
-                className="
-                  flex flex-col items-center justify-center
-                  rounded-xl p-5 cursor-pointer transition-all duration-300
-                  hover:scale-105
-                "
+                className="flex items-center justify-center mb-3 rounded-full"
                 style={{
-                  background: 'rgba(4, 55, 47, 0.25)',
-                  backdropFilter: 'blur(12px)',
-                  border: '1.5px solid rgba(40, 245, 204, 0.35)',
-                  boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.55)';
-                  e.currentTarget.style.boxShadow =
-                    '0 12px 35px rgba(40, 245, 204, 0.30)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.border = '1.5px solid rgba(40, 245, 204, 0.35)';
-                  e.currentTarget.style.boxShadow =
-                    '0 6px 20px rgba(0, 0, 0, 0.35)';
+                  width: '68px',
+                  height: '68px',
+                  background: 'linear-gradient(135deg, #04ad7b 0%, #28f5cc 100%)',
+                  boxShadow: '0 0 22px rgba(40, 245, 204, 0.45)',
+                  border: '1.5px solid rgba(4, 173, 123, 0.4)',
                 }}
               >
-                <div
-                  className="flex items-center justify-center mb-3 rounded-full"
-                  style={{
-                    width: '68px',
-                    height: '68px',
-                    background: 'linear-gradient(135deg, #04ad7b 0%, #28f5cc 100%)',
-                    boxShadow: '0 0 22px rgba(40, 245, 204, 0.45)',
-                    border: '1.5px solid rgba(4, 173, 123, 0.4)',
-                  }}
-                >
-                  <Plus className="w-7 h-7 text-white" />
-                </div>
-
-                <span
-                  className="text-white font-semibold text-lg tracking-wide"
-                  style={{
-                    textShadow: '0 0 10px rgba(40, 245, 204, 0.4)',
-                  }}
-                >
-                  Create Community
-                </span>
+                <Plus className="w-7 h-7 text-white" />
               </div>
+
+              <span
+                className="text-white font-semibold text-lg tracking-wide"
+                style={{
+                  textShadow: '0 0 10px rgba(40, 245, 204, 0.4)',
+                }}
+              >
+                Create Community
+              </span>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Posts Section */}

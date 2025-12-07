@@ -1,9 +1,8 @@
+import { useNavigate } from 'react-router-dom';
 import { UserSpaceBackground } from '../components/UserSpaceBackground';
 import { UniverseCanvas, UniverseCanvasRef } from '../components/UniverseCanvas';
 import { Planet3D } from '../components/Planet3D';
 import { UserSpaceSearchBar } from '../components/UserSpaceSearchBar';
-import { CommunityPage } from './CommunityPage';
-import { UserProfile } from './UserProfile';
 import { OpenCommunityButton } from '../components/OpenCommunityButton';
 import { CreateCommunityModal } from '../components/CreateCommunityModal';
 import { useState, useRef, useEffect } from 'react';
@@ -86,17 +85,12 @@ const mapDtoToCommunity = (dto: CommunityDto, index: number): CommunityWithVisua
   };
 };
 
-interface UserSpaceProps {
-  onBackToHome: () => void;
-}
-
-export function UserSpace({ onBackToHome }: UserSpaceProps) {
+export function UserSpace() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const [selectedPlanet, setSelectedPlanet] = useState<number | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
   const canvasRef = useRef<UniverseCanvasRef>(null);
-  const [currentView, setCurrentView] = useState<'space' | 'community' | 'profile'>('space');
-  const [selectedCommunity, setSelectedCommunity] = useState<CommunityWithVisuals | null>(null);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   // User's communities state
@@ -139,7 +133,11 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
     setIsAnimating(true);
     setSelectedPlanet(index);
     canvasRef.current?.animateToTarget(userCommunities[index].position3D, true);
-    setTimeout(() => setIsAnimating(false), 3700);
+    setTimeout(() => {
+      setIsAnimating(false);
+      // Navigate after animation completes
+      navigate(`/community/${userCommunities[index].id}`);
+    }, 3700);
   };
 
   // Handle direct planet click without 3-spin
@@ -182,48 +180,20 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
     // Refresh communities after creation
     if (user?.id) {
       try {
+        setIsLoadingCommunities(true);
         const userId = typeof user.id === 'string' ? parseInt(user.id, 10) : user.id;
-        const updatedCommunities = await getUserCommunities(userId);
+        const updatedCommunities = await getUserCommunitiesFromUserApi(userId);
         // Map to frontend format
-        const mapped = updatedCommunities.map((c, idx) => mapCommunityDtoToFrontend(c, idx));
+        const mapped = updatedCommunities.map((dto, idx) => mapDtoToCommunity(dto, idx));
         setUserCommunities(mapped);
       } catch (err) {
         console.error('Failed to refresh communities:', err);
+        setCommunitiesError(err instanceof Error ? err.message : 'Failed to refresh communities');
+      } finally {
+        setIsLoadingCommunities(false);
       }
     }
   };
-
-  // Render User Profile view
-  if (currentView === 'profile') {
-    return (
-      <UserProfile
-        onBack={() => {
-          setCurrentView('space');
-        }}
-      />
-    );
-  }
-
-  // Render Community Page view
-  if (currentView === 'community' && selectedCommunity) {
-    return (
-      <CommunityPage
-        communityId={selectedCommunity.id}
-        userRole="Owner" // TODO: Get actual user role from backend
-        onBack={() => {
-          setCurrentView('space');
-          setSelectedPlanet(null);
-          setSelectedCommunity(null);
-        }}
-        onGoToHome={onBackToHome}
-        onGoToUserSpace={() => {
-          setCurrentView('space');
-          setSelectedPlanet(null);
-          setSelectedCommunity(null);
-        }}
-      />
-    );
-  }
 
   return (
     <div className="relative h-screen w-full overflow-hidden">
@@ -232,7 +202,7 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
 
       {/* Back Button - Top Left */}
       <button
-        onClick={onBackToHome}
+        onClick={() => navigate('/')}
         className="absolute top-8 left-8 z-40 flex items-center gap-2 px-4 py-2 rounded-xl transition-all duration-300 hover:scale-105"
         style={{
           background: 'rgba(0, 0, 0, 0.6)',
@@ -248,7 +218,7 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
       {/* User Identity - Top Left, below back button */}
       {user && (
         <button
-          onClick={() => setCurrentView('profile')}
+          onClick={() => navigate('/profile')}
           className="absolute top-24 left-8 z-40 flex items-center gap-3 px-5 py-3 rounded-2xl transition-all duration-300 hover:scale-105 cursor-pointer"
           style={{
             background: 'rgba(0, 0, 0, 0.7)',
@@ -328,8 +298,7 @@ export function UserSpace({ onBackToHome }: UserSpaceProps) {
         <div className="absolute bottom-32 left-1/2 -translate-x-1/2 z-30 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <OpenCommunityButton
             onClick={() => {
-              setSelectedCommunity(userCommunities[selectedPlanet]);
-              setCurrentView('community');
+              navigate(`/community/${userCommunities[selectedPlanet].id}`);
             }}
           />
         </div>

@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { Label } from './ui/label';
 import { useAuth } from '../contexts/AuthContext';
 import { ImageUpload } from './ImageUpload';
+import { signup as signupApi, login as loginApi, ApiResponse } from '../api/authApi';
 
 interface AuthCardProps {
   isOpen: boolean;
@@ -19,6 +20,7 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
   // Sign In fields
   const [email, setEmail] = useState('');
@@ -29,6 +31,8 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
   const [age, setAge] = useState('');
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>('');
+  const [bannerFile, setBannerFile] = useState<File | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string>('');
 
   // Sign Up Step 2 fields
   const [signupEmail, setSignupEmail] = useState('');
@@ -48,10 +52,13 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
       setAge('');
       setAvatarFile(null);
       setAvatarPreview('');
+      setBannerFile(null);
+      setBannerPreview('');
       setSignupEmail('');
       setSignupPassword('');
       setConfirmPassword('');
       setError('');
+      setFieldErrors({});
       setShowPassword(false);
       setShowConfirmPassword(false);
     } else {
@@ -73,6 +80,7 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
     
     if (!email || !password) {
       setError('Please fill in all fields');
@@ -81,10 +89,22 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
 
     setIsLoading(true);
     try {
-      await login(email, password);
-      onClose();
-    } catch (err) {
-      setError('Invalid email or password');
+      const response: ApiResponse<any> = await loginApi({ email, password });
+      if (response.success && response.data) {
+        await login(email, password);
+        onClose();
+      } else {
+        setError(response.message || 'Invalid email or password');
+      }
+    } catch (err: any) {
+      if (err.message) {
+        setError(err.message);
+      } else if (err.errors) {
+        setFieldErrors(err.errors);
+        setError(err.message || 'Some fields are invalid.');
+      } else {
+        setError('Invalid email or password');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -102,6 +122,7 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
   const handleSignUpStep2 = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setFieldErrors({});
 
     if (!signupEmail || !signupPassword || !confirmPassword) {
       setError('Please fill in all fields');
@@ -110,11 +131,13 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
 
     if (signupPassword !== confirmPassword) {
       setError('Passwords do not match');
+      setFieldErrors({ password: 'Passwords do not match' });
       return;
     }
 
-    if (signupPassword.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (signupPassword.length < 8) {
+      setError('Password must be at least 8 characters long');
+      setFieldErrors({ password: 'Password must be at least 8 characters long' });
       return;
     }
 
@@ -130,13 +153,41 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
         avatarUrl = URL.createObjectURL(avatarFile);
       }
       
-      // Backend should handle Cloudinary upload and return the final URL
-      // For now, we pass the file reference or preview URL
-      await signup(username, signupEmail, signupPassword, parseInt(age), avatarUrl || '');
-      onClose();
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to create account. Please try again.';
-      setError(errorMessage);
+      let bannerUrl = bannerPreview;
+      
+      if (bannerFile && !bannerPreview) {
+        // Create temporary preview URL
+        bannerUrl = URL.createObjectURL(bannerFile);
+      }
+      
+      // Call the new auth API
+      const response: ApiResponse<any> = await signupApi({
+        username,
+        email: signupEmail,
+        password: signupPassword,
+        avatarUrl: avatarUrl || '',
+        bannerUrl: bannerUrl || '',
+        age: parseInt(age),
+      });
+
+      if (response.success && response.data) {
+        await signup(username, signupEmail, signupPassword, parseInt(age), avatarUrl || '', bannerUrl || '');
+        onClose();
+      } else {
+        setError(response.message || 'Failed to create account. Please try again.');
+        if (response.errors) {
+          setFieldErrors(response.errors);
+        }
+      }
+    } catch (err: any) {
+      if (err.message) {
+        setError(err.message);
+      } else if (err.errors) {
+        setFieldErrors(err.errors);
+        setError(err.message || 'Some fields are invalid.');
+      } else {
+        setError('Failed to create account. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -212,12 +263,20 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     id="email"
                     type="email"
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="pl-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20"
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
+                    }}
+                    className={`pl-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20 ${
+                      fieldErrors.email ? 'border-red-500/50' : ''
+                    }`}
                     placeholder="your@email.com"
                     required
                   />
                 </div>
+                {fieldErrors.email && (
+                  <p className="mt-1 text-xs text-red-400">{fieldErrors.email}</p>
+                )}
               </div>
 
               <div>
@@ -230,8 +289,13 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     id="password"
                     type={showPassword ? 'text' : 'password'}
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="pl-10 pr-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20"
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: '' });
+                    }}
+                    className={`pl-10 pr-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20 ${
+                      fieldErrors.password ? 'border-red-500/50' : ''
+                    }`}
                     placeholder="••••••••"
                     required
                   />
@@ -243,6 +307,9 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {fieldErrors.password && (
+                  <p className="mt-1 text-xs text-red-400">{fieldErrors.password}</p>
+                )}
               </div>
 
               <div className="flex items-center justify-between text-sm">
@@ -331,6 +398,27 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
               </div>
 
               <div>
+                <Label className="text-[#747c88] mb-3 block text-center">
+                  Upload Your Banner (Optional)
+                </Label>
+                <ImageUpload
+                  onImageSelect={(file) => {
+                    setBannerFile(file);
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        setBannerPreview(reader.result as string);
+                      };
+                      reader.readAsDataURL(file);
+                    } else {
+                      setBannerPreview('');
+                    }
+                  }}
+                  currentImageUrl={bannerPreview}
+                />
+              </div>
+
+              <div>
                 <Label htmlFor="username" className="text-[#747c88] mb-2 block">
                   Username
                 </Label>
@@ -340,12 +428,20 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     id="username"
                     type="text"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="pl-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20"
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      if (fieldErrors.username) setFieldErrors({ ...fieldErrors, username: '' });
+                    }}
+                    className={`pl-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20 ${
+                      fieldErrors.username ? 'border-red-500/50' : ''
+                    }`}
                     placeholder="Choose a username"
                     required
                   />
                 </div>
+                {fieldErrors.username && (
+                  <p className="mt-1 text-xs text-red-400">{fieldErrors.username}</p>
+                )}
               </div>
 
               <div>
@@ -417,12 +513,20 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     id="signup-email"
                     type="email"
                     value={signupEmail}
-                    onChange={(e) => setSignupEmail(e.target.value)}
-                    className="pl-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20"
+                    onChange={(e) => {
+                      setSignupEmail(e.target.value);
+                      if (fieldErrors.email) setFieldErrors({ ...fieldErrors, email: '' });
+                    }}
+                    className={`pl-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20 ${
+                      fieldErrors.email ? 'border-red-500/50' : ''
+                    }`}
                     placeholder="your@email.com"
                     required
                   />
                 </div>
+                {fieldErrors.email && (
+                  <p className="mt-1 text-xs text-red-400">{fieldErrors.email}</p>
+                )}
               </div>
 
               <div>
@@ -435,8 +539,13 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     id="signup-password"
                     type={showPassword ? 'text' : 'password'}
                     value={signupPassword}
-                    onChange={(e) => setSignupPassword(e.target.value)}
-                    className="pl-10 pr-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20"
+                    onChange={(e) => {
+                      setSignupPassword(e.target.value);
+                      if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: '' });
+                    }}
+                    className={`pl-10 pr-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20 ${
+                      fieldErrors.password ? 'border-red-500/50' : ''
+                    }`}
                     placeholder="••••••••"
                     required
                   />
@@ -448,6 +557,9 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                   </button>
                 </div>
+                {fieldErrors.password && (
+                  <p className="mt-1 text-xs text-red-400">{fieldErrors.password}</p>
+                )}
               </div>
 
               <div>
@@ -460,8 +572,13 @@ export function AuthCard({ isOpen, onClose, initialMode = 'signin' }: AuthCardPr
                     id="confirm-password"
                     type={showConfirmPassword ? 'text' : 'password'}
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="pl-10 pr-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20"
+                    onChange={(e) => {
+                      setConfirmPassword(e.target.value);
+                      if (fieldErrors.password) setFieldErrors({ ...fieldErrors, password: '' });
+                    }}
+                    className={`pl-10 pr-10 bg-[#2a3444]/50 border-[#747c88]/30 text-white placeholder:text-[#747c88]/50 focus:border-[#28f5cc] focus:ring-[#28f5cc]/20 ${
+                      fieldErrors.password ? 'border-red-500/50' : ''
+                    }`}
                     placeholder="••••••••"
                     required
                   />
